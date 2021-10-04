@@ -5,7 +5,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from ogb.graphproppred import Evaluator
 
-from molnet_geometric_lightning.model import Net, MolData
+from hbond_benchmark.model import Net, MolData
 
 
 def parse_args(args):
