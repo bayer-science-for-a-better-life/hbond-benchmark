@@ -1,11 +1,15 @@
 import torch
 
+from solubility.molecule_net import x_map as x_map_h
+from solubility.molecule_net import e_map as e_map_h
 from torch_geometric.datasets.molecule_net import x_map as x_map_default
 from torch_geometric.datasets.molecule_net import e_map as e_map_default
 
-
-def get_atom_feature_dims():
-    allowable_features = x_map_default
+def get_atom_feature_dims(hydrogen_bonds=False):
+    if hydrogen_bonds:
+        allowable_features = x_map_h
+    else:
+        allowable_features = x_map_default
     return list(map(len, [
         allowable_features['atomic_num'],
         allowable_features['chirality'],
@@ -18,9 +22,11 @@ def get_atom_feature_dims():
         allowable_features['is_in_ring']
         ]))
 
-
-def get_bond_feature_dims():
-    allowable_features = e_map_default
+def get_bond_feature_dims(hydrogen_bonds=False):
+    if hydrogen_bonds:
+        allowable_features = e_map_h
+    else:
+        allowable_features = e_map_default
     return list(map(len, [
         allowable_features['bond_type'],
         allowable_features['stereo'],
@@ -30,10 +36,10 @@ def get_bond_feature_dims():
 
 class AtomEncoder(torch.nn.Module):
 
-    def __init__(self, emb_dim):
+    def __init__(self, emb_dim, hydrogen_bonds=False):
         super(AtomEncoder, self).__init__()
 
-        full_atom_feature_dims = get_atom_feature_dims()
+        full_atom_feature_dims = get_atom_feature_dims(hydrogen_bonds)
 
         self.atom_embedding_list = torch.nn.ModuleList()
 
@@ -52,10 +58,10 @@ class AtomEncoder(torch.nn.Module):
 
 class BondEncoder(torch.nn.Module):
 
-    def __init__(self, emb_dim):
+    def __init__(self, emb_dim, hydrogen_bonds=False):
         super(BondEncoder, self).__init__()
 
-        full_bond_feature_dims = get_bond_feature_dims()
+        full_bond_feature_dims = get_bond_feature_dims(hydrogen_bonds)
 
         self.bond_embedding_list = torch.nn.ModuleList()
 
