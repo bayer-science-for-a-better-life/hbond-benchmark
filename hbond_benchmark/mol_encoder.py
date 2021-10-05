@@ -5,6 +5,7 @@ from solubility.molecule_net import e_map as e_map_h
 from torch_geometric.datasets.molecule_net import x_map as x_map_default
 from torch_geometric.datasets.molecule_net import e_map as e_map_default
 
+
 def get_atom_feature_dims(hydrogen_bonds=False):
     if hydrogen_bonds:
         allowable_features = x_map_h
@@ -21,6 +22,7 @@ def get_atom_feature_dims(hydrogen_bonds=False):
         allowable_features['is_aromatic'],
         allowable_features['is_in_ring']
         ]))
+
 
 def get_bond_feature_dims(hydrogen_bonds=False):
     if hydrogen_bonds:

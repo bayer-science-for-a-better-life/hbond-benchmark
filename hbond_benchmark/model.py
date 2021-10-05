@@ -17,6 +17,7 @@ from .mol_encoder import AtomEncoder, BondEncoder
 cls_criterion = BCEWithLogitsLoss()
 reg_criterion = MSELoss()
 
+
 class MolData(LightningDataModule):
     def __init__(
             self,
@@ -192,7 +193,7 @@ class Net(LightningModule):
             for layer in range(self.n_conv_layers - 1):
                 self.mlp_virtualnode_list.append(
                     torch.nn.Sequential(
-                        torch.nn.Linear( self.embedding_dim, 2 * self.embedding_dim),
+                        torch.nn.Linear(self.embedding_dim, 2 * self.embedding_dim),
                         BatchNorm1d(2 * self.embedding_dim),
                         ReLU(),
                         Linear(2 * self.embedding_dim, self.embedding_dim),

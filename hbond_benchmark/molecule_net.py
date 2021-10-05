@@ -122,7 +122,7 @@ class MoleculeNetHBonds(InMemoryDataset):
         self.name = name.lower()
         assert self.name in self.names.keys()
         super(MoleculeNetHBonds, self).__init__(root, transform, pre_transform,
-                                          pre_filter)
+                                                pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
@@ -148,7 +148,7 @@ class MoleculeNetHBonds(InMemoryDataset):
             extract_gz(path, self.raw_dir)
             os.unlink(path)
 
-    def process(self):
+    def process(self): # noqa
         from rdkit import Chem
 
         with open(self.raw_paths[0], 'r') as f:
@@ -217,7 +217,7 @@ class MoleculeNetHBonds(InMemoryDataset):
 
                                 edge_indices += [[donor_idx, acceptor_idx], [acceptor_idx, donor_idx]]
                                 edge_attrs += [e, e]
-            except ValueError as e:
+            except ValueError:
                 warnings.warn(f'Couldn\'t embed {smiles}, skipping H-bonds.')
 
             edge_index = torch.tensor(edge_indices)
