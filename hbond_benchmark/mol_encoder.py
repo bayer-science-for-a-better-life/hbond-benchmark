@@ -1,7 +1,7 @@
 import torch
 
-from solubility.molecule_net import x_map as x_map_h
-from solubility.molecule_net import e_map as e_map_h
+from hbond_benchmark.molecule_net import x_map as x_map_h
+from hbond_benchmark.molecule_net import e_map as e_map_h
 from torch_geometric.datasets.molecule_net import x_map as x_map_default
 from torch_geometric.datasets.molecule_net import e_map as e_map_default
 
