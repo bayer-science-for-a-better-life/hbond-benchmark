@@ -1,11 +1,16 @@
 import os
 import os.path as osp
 import re
+import warnings
 
+import numpy as np
 import torch
 from torch_geometric.data import (InMemoryDataset, Data, download_url,
                                   extract_gz)
 from tqdm import tqdm
+
+from .hydrogen_bonds import get_donor_acceptor_distances
+
 
 x_map = {
     'atomic_num':
@@ -45,6 +50,7 @@ e_map = {
         'DOUBLE',
         'TRIPLE',
         'AROMATIC',
+        'HYDROGEN',
     ],
     'stereo': [
         'STEREONONE',
@@ -115,7 +121,8 @@ class MoleculeNetHBonds(InMemoryDataset):
                  pre_filter=None):
         self.name = name.lower()
         assert self.name in self.names.keys()
-        super(MoleculeNetHBonds, self).__init__(root, transform, pre_transform, pre_filter)
+        super(MoleculeNetHBonds, self).__init__(root, transform, pre_transform,
+                                                pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
@@ -141,7 +148,7 @@ class MoleculeNetHBonds(InMemoryDataset):
             extract_gz(path, self.raw_dir)
             os.unlink(path)
 
-    def process(self):
+    def process(self): # noqa
         from rdkit import Chem
 
         with open(self.raw_paths[0], 'r') as f:
@@ -194,6 +201,24 @@ class MoleculeNetHBonds(InMemoryDataset):
 
                 edge_indices += [[i, j], [j, i]]
                 edge_attrs += [e, e]
+
+            # get hydrogen bonds
+            try:
+                donors, acceptors, distances = get_donor_acceptor_distances(mol)
+                if distances.size > 0:
+                    distances = np.nanmean(distances, axis=-1)
+                    for row_idx, donor_idx in enumerate(donors):
+                        for col_idx, acceptor_idx in enumerate(acceptors):
+                            if distances[row_idx][col_idx] <= 2.35:
+                                e = []
+                                e.append(e_map['bond_type'].index('HYDROGEN'))
+                                e.append(e_map['stereo'].index('STEREONONE'))
+                                e.append(e_map['is_conjugated'].index(False))
+
+                                edge_indices += [[donor_idx, acceptor_idx], [acceptor_idx, donor_idx]]
+                                edge_attrs += [e, e]
+            except ValueError:
+                warnings.warn(f'Couldn\'t embed {smiles}, skipping H-bonds.')
 
             edge_index = torch.tensor(edge_indices)
             edge_index = edge_index.t().to(torch.long).view(2, -1)

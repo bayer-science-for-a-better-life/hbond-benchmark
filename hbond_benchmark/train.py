@@ -5,7 +5,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from ogb.graphproppred import Evaluator
 
-from molnet_geometric_lightning.model import Net, MolData
+from hbond_benchmark.model import Net, MolData
 
 
 def parse_args(args):
@@ -18,6 +18,9 @@ def parse_args(args):
     )
     parser.add_argument(
         '--dataset_root', type=str, default='data'
+    )
+    parser.add_argument(
+        '--hbonds', action='store_true', default=False,
     )
     parser.add_argument(
         '--n_runs', type=int, default=1,
@@ -36,6 +39,7 @@ def train(args):
     mol_data = MolData(
         root=args.dataset_root,
         name=args.dataset_name,
+        hydrogen_bonds=args.hbonds,
         batch_size=args.batch_size,
     )
 
@@ -57,6 +61,7 @@ def train(args):
         trainer.checkpoint_callback.save_top_k = 1
         model = Net(
             task_type=mol_data.task_type,
+            h_bonds=args.hbonds,
             num_tasks=mol_data.num_tasks,
             evaluator=evaluator,
             conf=args,
