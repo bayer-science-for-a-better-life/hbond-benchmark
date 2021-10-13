@@ -43,7 +43,11 @@ def train(args):
         batch_size=args.batch_size,
     )
 
-    evaluator = Evaluator(f'ogbg-mol{args.dataset_name}')
+    if args.dataset_name in ['antibiotic']:
+        # any AUCROC evaluator will do
+        evaluator = Evaluator(f'ogbg-molhiv')
+    else:
+        evaluator = Evaluator(f'ogbg-mol{args.dataset_name}')
 
     for _ in range(args.n_runs):
         if args.early_stopping is not None:

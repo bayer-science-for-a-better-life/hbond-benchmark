@@ -1,3 +1,5 @@
+import os
+
 from ogb.graphproppred.dataset_pyg import PygGraphPropPredDataset
 from pytorch_lightning import LightningModule, LightningDataModule
 from torch_geometric.nn import MessagePassing, global_mean_pool, global_add_pool
@@ -8,8 +10,9 @@ import torch.nn.functional as F
 from torch.nn import Linear, Sequential, Parameter, BatchNorm1d, ReLU, ModuleList, BCEWithLogitsLoss, MSELoss, Embedding
 from torch_geometric.data import DataLoader
 from torch_geometric.nn.functional import bro, gini
-from torch_geometric.datasets import MoleculeNet
 from torch_geometric.utils import degree
+from sklearn.model_selection import StratifiedShuffleSplit
+import numpy as np
 
 from .molecule_net import MoleculeNetHBonds
 from .mol_encoder import AtomEncoder, BondEncoder
@@ -29,12 +32,16 @@ class MolData(LightningDataModule):
         super().__init__()
         self.name = name
         self.root = root
+        self.hydrogen_bonds = hydrogen_bonds
         self.batch_size = batch_size
-        if hydrogen_bonds:
-            self.dataset_class = MoleculeNetHBonds
-        else:
-            self.dataset_class = MoleculeNet
+        self.dataset_class = MoleculeNetHBonds
         # only need the split idx from the ogb dataset
+        if self.name in ['antibiotic']:
+            self.task_type = 'classification'
+            self.num_tasks = 1
+            return
+
+
         ogb_name = f'ogbg-mol{name}'
         ogb_dataset = PygGraphPropPredDataset(name=ogb_name, root='/tmp/ogb')
         self.split_dict = ogb_dataset.get_idx_split()
@@ -46,8 +53,20 @@ class MolData(LightningDataModule):
         if stage in (None, 'fit'):
             self.dataset = self.dataset_class(
                 root=self.root,
+                hbonds=self.hydrogen_bonds,
                 name=self.name,
             )
+        if self.name == 'antibiotic':
+            sss_tvt = StratifiedShuffleSplit(n_splits=2, test_size=0.20, random_state=0)
+            sss_vt = StratifiedShuffleSplit(n_splits=2, test_size=0.50, random_state=0)
+            train_index, valtest_index = next(sss_tvt.split(self.dataset.data.y, self.dataset.data.y))
+            val_index, test_index = next(sss_vt.split(self.dataset.data.y[valtest_index], self.dataset.data.y[valtest_index]))
+            val_index = valtest_index[val_index]
+            test_index = valtest_index[test_index]
+            assert not np.intersect1d(train_index, val_index).any()
+            assert not np.intersect1d(train_index, test_index).any()
+            assert not np.intersect1d(val_index, test_index).any()
+            self.split_dict = {'train': train_index, 'valid': val_index, 'test': test_index}
 
     def train_dataloader(self):
         return DataLoader(
@@ -68,7 +87,7 @@ class MolData(LightningDataModule):
         return DataLoader(
             self.dataset[self.split_dict['test']],
             batch_size=self.batch_size,
-            num_workers=4,
+            num_workers=1,
         )
 
 
