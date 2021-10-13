@@ -27,12 +27,16 @@ class MolData(LightningDataModule):
             root,
             name,
             hydrogen_bonds=False,
+            hbond_cutoff_dist=2.35,
+            hbond_top_dists=(4, 5, 6),
             batch_size=32,
     ):
         super().__init__()
         self.name = name
         self.root = root
         self.hydrogen_bonds = hydrogen_bonds
+        self.hbond_cutoff_dist = hbond_cutoff_dist
+        self.hbond_top_dists = hbond_top_dists,
         self.batch_size = batch_size
         self.dataset_class = MoleculeNetHBonds
         # only need the split idx from the ogb dataset
@@ -54,6 +58,8 @@ class MolData(LightningDataModule):
             self.dataset = self.dataset_class(
                 root=self.root,
                 hbonds=self.hydrogen_bonds,
+                hbond_cutoff_dist=self.hbond_cutoff_dist,
+                hbond_top_dists=self.hbond_top_dists,
                 name=self.name,
             )
         if self.name == 'antibiotic':

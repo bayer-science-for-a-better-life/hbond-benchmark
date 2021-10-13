@@ -120,10 +120,16 @@ class MoleculeNetHBonds(InMemoryDataset):
         # https://ars.els-cdn.com/content/image/1-s2.0-S0092867420301021-mmc1.xlsx
     }
 
-    def __init__(self, root, name, hbonds=True, transform=None, pre_transform=None,
+    def __init__(self, root, name,
+                 hbonds=True,
+                 hbond_cutoff_dist=2.35,
+                 hbond_top_dists=(4, 5, 6),
+                 transform=None, pre_transform=None,
                  pre_filter=None):
         self.name = name.lower()
         self.hbonds = hbonds
+        self.hbond_cutoff_dist = hbond_cutoff_dist
+        self.hbond_top_dists = hbond_top_dists
         assert self.name in self.names.keys()
         super(MoleculeNetHBonds, self).__init__(root, transform, pre_transform,
                                                 pre_filter)
@@ -217,12 +223,12 @@ class MoleculeNetHBonds(InMemoryDataset):
             # get hydrogen bonds
             if self.hbonds:
                 try:
-                    donors, acceptors, distances = get_donor_acceptor_distances(mol)
+                    donors, acceptors, distances = get_donor_acceptor_distances(mol, hbond_top_dists=self.hbond_top_dists)
                     if distances.size > 0:
                         distances = np.nanmean(distances, axis=-1)
                         for row_idx, donor_idx in enumerate(donors):
                             for col_idx, acceptor_idx in enumerate(acceptors):
-                                if distances[row_idx][col_idx] <= 2.35:
+                                if distances[row_idx][col_idx] <= self.hbond_cutoff_dist:
                                     e = []
                                     e.append(e_map['bond_type'].index('HYDROGEN'))
                                     e.append(e_map['stereo'].index('STEREONONE'))
