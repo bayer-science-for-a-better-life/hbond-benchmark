@@ -282,18 +282,29 @@ class Net(LightningModule):
                         training=self.training)
 
         if self.JK == 'last':
-            node_representation = h_list[-1]
+            self.node_representation = h_list[-1]
         elif self.JK == 'sum':
-            node_representation = 0
+            self.node_representation = 0
             for layer in range(self.n_conv_layers + 1):
-                node_representation += h_list[layer]
+                self.node_representation += h_list[layer]
 
         # calculate BRO
         if self.BRO is not None and self.BRO > 0.0:
-            self.bro_loss = self.BRO / 2 * bro(node_representation, batch)
+            self.bro_loss = self.BRO / 2 * bro(self.node_representation, batch)
 
-        graph_representation = global_mean_pool(node_representation, batch)
-        return self.graph_pred_linear(graph_representation)
+        self.graph_representation = global_mean_pool(self.node_representation, batch)
+        return self.graph_pred_linear(self.graph_representation)
+
+    def CAM(self, task=0):
+        """Get the class attribution mapping for a task"""
+        if task >= len(range(self.num_tasks)):
+            raise ValueError(f'{task} must be between 0 and {self.num_tasks - 1}')
+        task_index = task
+        regression_weights = self.graph_pred_linear.weight[task_index].cpu().detach().numpy()
+        GAP_like = self.graph_representation.cpu().detach().numpy()
+        w = (regression_weights * GAP_like)
+        w = w.reshape(1, -1)
+        return w @ abs(self.node_representation.cpu().detach().numpy().T)
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.initial_learning_rate)
