@@ -53,7 +53,7 @@ def train(args):
 
     if args.dataset_name in ['antibiotic']:
         # any AUCROC evaluator will do
-        evaluator = Evaluator(f'ogbg-molhiv')
+        evaluator = Evaluator('ogbg-molhiv')
     else:
         evaluator = Evaluator(f'ogbg-mol{args.dataset_name}')
 
