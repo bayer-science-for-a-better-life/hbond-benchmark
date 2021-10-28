@@ -8,8 +8,9 @@ import torch.nn.functional as F
 from torch.nn import Linear, Sequential, Parameter, BatchNorm1d, ReLU, ModuleList, BCEWithLogitsLoss, MSELoss, Embedding
 from torch_geometric.data import DataLoader
 from torch_geometric.nn.functional import bro, gini
-from torch_geometric.datasets import MoleculeNet
 from torch_geometric.utils import degree
+from sklearn.model_selection import StratifiedShuffleSplit
+import numpy as np
 
 from .molecule_net import MoleculeNetHBonds
 from .mol_encoder import AtomEncoder, BondEncoder
@@ -24,17 +25,24 @@ class MolData(LightningDataModule):
             root,
             name,
             hydrogen_bonds=False,
+            hbond_cutoff_dist=2.35,
+            hbond_top_dists=(4, 5, 6),
             batch_size=32,
     ):
         super().__init__()
         self.name = name
         self.root = root
+        self.hydrogen_bonds = hydrogen_bonds
+        self.hbond_cutoff_dist = hbond_cutoff_dist
+        self.hbond_top_dists = hbond_top_dists,
         self.batch_size = batch_size
-        if hydrogen_bonds:
-            self.dataset_class = MoleculeNetHBonds
-        else:
-            self.dataset_class = MoleculeNet
+        self.dataset_class = MoleculeNetHBonds
         # only need the split idx from the ogb dataset
+        if self.name in ['antibiotic']:
+            self.task_type = 'classification'
+            self.num_tasks = 1
+            return
+
         ogb_name = f'ogbg-mol{name}'
         ogb_dataset = PygGraphPropPredDataset(name=ogb_name, root='/tmp/ogb')
         self.split_dict = ogb_dataset.get_idx_split()
@@ -46,8 +54,22 @@ class MolData(LightningDataModule):
         if stage in (None, 'fit'):
             self.dataset = self.dataset_class(
                 root=self.root,
+                hbonds=self.hydrogen_bonds,
+                hbond_cutoff_dist=self.hbond_cutoff_dist,
+                hbond_top_dists=self.hbond_top_dists,
                 name=self.name,
             )
+        if self.name == 'antibiotic':
+            sss_tvt = StratifiedShuffleSplit(n_splits=2, test_size=0.20, random_state=0)
+            sss_vt = StratifiedShuffleSplit(n_splits=2, test_size=0.50, random_state=0)
+            train_index, valtest_index = next(sss_tvt.split(self.dataset.data.y, self.dataset.data.y))
+            val_index, test_index = next(sss_vt.split(self.dataset.data.y[valtest_index], self.dataset.data.y[valtest_index]))
+            val_index = valtest_index[val_index]
+            test_index = valtest_index[test_index]
+            assert not np.intersect1d(train_index, val_index).any()
+            assert not np.intersect1d(train_index, test_index).any()
+            assert not np.intersect1d(val_index, test_index).any()
+            self.split_dict = {'train': train_index, 'valid': val_index, 'test': test_index}
 
     def train_dataloader(self):
         return DataLoader(
@@ -68,7 +90,7 @@ class MolData(LightningDataModule):
         return DataLoader(
             self.dataset[self.split_dict['test']],
             batch_size=self.batch_size,
-            num_workers=4,
+            num_workers=1,
         )
 
 
@@ -257,18 +279,29 @@ class Net(LightningModule):
                         training=self.training)
 
         if self.JK == 'last':
-            node_representation = h_list[-1]
+            self.node_representation = h_list[-1]
         elif self.JK == 'sum':
-            node_representation = 0
+            self.node_representation = 0
             for layer in range(self.n_conv_layers + 1):
-                node_representation += h_list[layer]
+                self.node_representation += h_list[layer]
 
         # calculate BRO
         if self.BRO is not None and self.BRO > 0.0:
-            self.bro_loss = self.BRO / 2 * bro(node_representation, batch)
+            self.bro_loss = self.BRO / 2 * bro(self.node_representation, batch)
 
-        graph_representation = global_mean_pool(node_representation, batch)
-        return self.graph_pred_linear(graph_representation)
+        self.graph_representation = global_mean_pool(self.node_representation, batch)
+        return self.graph_pred_linear(self.graph_representation)
+
+    def CAM(self, task=0):
+        """Get the class attribution mapping for a task"""
+        if task >= len(range(self.num_tasks)):
+            raise ValueError(f'{task} must be between 0 and {self.num_tasks - 1}')
+        task_index = task
+        regression_weights = self.graph_pred_linear.weight[task_index].cpu().detach().numpy()
+        GAP_like = self.graph_representation.cpu().detach().numpy()
+        w = (regression_weights * GAP_like)
+        w = w.reshape(1, -1)
+        return w @ abs(self.node_representation.cpu().detach().numpy().T)
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.initial_learning_rate)

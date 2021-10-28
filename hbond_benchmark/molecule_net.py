@@ -3,6 +3,7 @@ import os.path as osp
 import re
 import warnings
 
+import pandas as pd
 import numpy as np
 import torch
 from torch_geometric.data import (InMemoryDataset, Data, download_url,
@@ -115,11 +116,20 @@ class MoleculeNetHBonds(InMemoryDataset):
                   slice(1, 28)],
         'clintox': ['ClinTox', 'clintox.csv.gz', 'clintox', 0,
                     slice(1, 3)],
+        'antibiotic': ['antibiotic', '1-s2.0-S0092867420301021-mmc1.xlsx', 'antibiotic', 2, -1]
+        # https://ars.els-cdn.com/content/image/1-s2.0-S0092867420301021-mmc1.xlsx
     }
 
-    def __init__(self, root, name, transform=None, pre_transform=None,
+    def __init__(self, root, name,
+                 hbonds=True,
+                 hbond_cutoff_dist=2.35,
+                 hbond_top_dists=(4, 5, 6),
+                 transform=None, pre_transform=None,
                  pre_filter=None):
         self.name = name.lower()
+        self.hbonds = hbonds
+        self.hbond_cutoff_dist = hbond_cutoff_dist
+        self.hbond_top_dists = hbond_top_dists
         assert self.name in self.names.keys()
         super(MoleculeNetHBonds, self).__init__(root, transform, pre_transform,
                                                 pre_filter)
@@ -142,11 +152,19 @@ class MoleculeNetHBonds(InMemoryDataset):
         return 'data.pt'
 
     def download(self):
-        url = self.url.format(self.names[self.name][1])
-        path = download_url(url, self.raw_dir)
-        if self.names[self.name][1][-2:] == 'gz':
-            extract_gz(path, self.raw_dir)
-            os.unlink(path)
+        if self.name in ['antibiotic']:
+            url = 'https://ars.els-cdn.com/content/image/1-s2.0-S0092867420301021-mmc1.xlsx'
+            os.system(f'wget {url} --no-check-certificate --directory-prefix={self.raw_dir}')
+            df = pd.read_excel(osp.join(self.raw_dir, self.names[self.name][1]), sheet_name='S1B', skiprows=1)
+            df[self.name] = 0
+            df[self.name][df.Activity == 'Active'] = 1
+            df.to_csv(os.path.join(self.raw_dir, f'{self.names[self.name][2]}.csv'))
+        else:
+            url = self.url.format(self.names[self.name][1])
+            path = download_url(url, self.raw_dir)
+            if self.names[self.name][1][-2:] == 'gz':
+                extract_gz(path, self.raw_dir)
+                os.unlink(path)
 
     def process(self): # noqa
         from rdkit import Chem
@@ -203,22 +221,23 @@ class MoleculeNetHBonds(InMemoryDataset):
                 edge_attrs += [e, e]
 
             # get hydrogen bonds
-            try:
-                donors, acceptors, distances = get_donor_acceptor_distances(mol)
-                if distances.size > 0:
-                    distances = np.nanmean(distances, axis=-1)
-                    for row_idx, donor_idx in enumerate(donors):
-                        for col_idx, acceptor_idx in enumerate(acceptors):
-                            if distances[row_idx][col_idx] <= 2.35:
-                                e = []
-                                e.append(e_map['bond_type'].index('HYDROGEN'))
-                                e.append(e_map['stereo'].index('STEREONONE'))
-                                e.append(e_map['is_conjugated'].index(False))
+            if self.hbonds:
+                try:
+                    donors, acceptors, distances = get_donor_acceptor_distances(mol, hbond_top_dists=self.hbond_top_dists)
+                    if distances.size > 0:
+                        distances = np.nanmean(distances, axis=-1)
+                        for row_idx, donor_idx in enumerate(donors):
+                            for col_idx, acceptor_idx in enumerate(acceptors):
+                                if distances[row_idx][col_idx] <= self.hbond_cutoff_dist:
+                                    e = []
+                                    e.append(e_map['bond_type'].index('HYDROGEN'))
+                                    e.append(e_map['stereo'].index('STEREONONE'))
+                                    e.append(e_map['is_conjugated'].index(False))
 
-                                edge_indices += [[donor_idx, acceptor_idx], [acceptor_idx, donor_idx]]
-                                edge_attrs += [e, e]
-            except ValueError:
-                warnings.warn(f'Couldn\'t embed {smiles}, skipping H-bonds.')
+                                    edge_indices += [[donor_idx, acceptor_idx], [acceptor_idx, donor_idx]]
+                                    edge_attrs += [e, e]
+                except ValueError:
+                    warnings.warn(f'Couldn\'t embed {smiles}, skipping H-bonds.')
 
             edge_index = torch.tensor(edge_indices)
             edge_index = edge_index.t().to(torch.long).view(2, -1)

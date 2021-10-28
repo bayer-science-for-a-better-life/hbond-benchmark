@@ -28,6 +28,12 @@ def parse_args(args):
     parser.add_argument(
         '--early_stopping', type=int, default=None,
     )
+    parser.add_argument(
+        '--hbond_cutoff_dist', type=float, default=2.35,
+    )
+    parser.add_argument(
+        '--hbond_top_dists', nargs='*', type=int, default=(4, 5, 6),
+    )
 
     parser = Net.add_model_specific_args(parser)
     parser = Trainer.add_argparse_args(parser)
@@ -40,10 +46,16 @@ def train(args):
         root=args.dataset_root,
         name=args.dataset_name,
         hydrogen_bonds=args.hbonds,
+        hbond_cutoff_dist=args.hbond_cutoff_dist,
+        hbond_top_dists=args.hbond_top_dists,
         batch_size=args.batch_size,
     )
 
-    evaluator = Evaluator(f'ogbg-mol{args.dataset_name}')
+    if args.dataset_name in ['antibiotic']:
+        # any AUCROC evaluator will do
+        evaluator = Evaluator('ogbg-molhiv')
+    else:
+        evaluator = Evaluator(f'ogbg-mol{args.dataset_name}')
 
     for _ in range(args.n_runs):
         if args.early_stopping is not None:
