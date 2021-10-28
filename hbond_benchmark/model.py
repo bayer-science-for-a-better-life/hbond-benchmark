@@ -1,5 +1,3 @@
-import os
-
 from ogb.graphproppred.dataset_pyg import PygGraphPropPredDataset
 from pytorch_lightning import LightningModule, LightningDataModule
 from torch_geometric.nn import MessagePassing, global_mean_pool, global_add_pool
@@ -44,7 +42,6 @@ class MolData(LightningDataModule):
             self.task_type = 'classification'
             self.num_tasks = 1
             return
-
 
         ogb_name = f'ogbg-mol{name}'
         ogb_dataset = PygGraphPropPredDataset(name=ogb_name, root='/tmp/ogb')
