@@ -9,10 +9,10 @@ from torch.nn import Linear, Sequential, Parameter, BatchNorm1d, ReLU, ModuleLis
 from torch_geometric.data import DataLoader
 from torch_geometric.nn.functional import bro, gini
 from torch_geometric.utils import degree
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit, ShuffleSplit
 import numpy as np
 
-from .molecule_net import MoleculeNetHBonds
+from .molecule_net import MoleculeNetHBonds, CustomDatasetHBonds
 from .mol_encoder import AtomEncoder, BondEncoder
 
 cls_criterion = BCEWithLogitsLoss()
@@ -24,6 +24,10 @@ class MolData(LightningDataModule):
             self,
             root,
             name,
+            path=None,
+            smiles_idx=None,
+            y_idx=None,
+            task_type='regression',
             hydrogen_bonds=False,
             hbond_cutoff_dist=2.35,
             hbond_top_dists=(4, 5, 6),
@@ -32,38 +36,61 @@ class MolData(LightningDataModule):
         super().__init__()
         self.name = name
         self.root = root
+        self.path = path
+        self.smiles_idx = smiles_idx
+        self.y_idx = y_idx
         self.hydrogen_bonds = hydrogen_bonds
         self.hbond_cutoff_dist = hbond_cutoff_dist
         self.hbond_top_dists = hbond_top_dists,
         self.batch_size = batch_size
-        self.dataset_class = MoleculeNetHBonds
+        if self.path is None:  # then it's an OGB dataset
+            self.dataset_class = MoleculeNetHBonds
+            ogb_name = f'ogbg-mol{name}'
+            ogb_dataset = PygGraphPropPredDataset(name=ogb_name, root='/tmp/ogb')
+            self.split_dict = ogb_dataset.get_idx_split()
+            self.task_type = ogb_dataset.task_type
+            self.num_tasks = ogb_dataset.num_tasks
+            del ogb_dataset
+        else:
+            self.dataset_class = CustomDatasetHBonds
+            self.num_tasks = len(self.y_idx)
+            self.task_type = task_type
         # only need the split idx from the ogb dataset
         if self.name in ['antibiotic']:
             self.task_type = 'classification'
             self.num_tasks = 1
             return
 
-        ogb_name = f'ogbg-mol{name}'
-        ogb_dataset = PygGraphPropPredDataset(name=ogb_name, root='/tmp/ogb')
-        self.split_dict = ogb_dataset.get_idx_split()
-        self.task_type = ogb_dataset.task_type
-        self.num_tasks = ogb_dataset.num_tasks
-        del ogb_dataset
-
     def setup(self, stage: None):
         if stage in (None, 'fit'):
             self.dataset = self.dataset_class(
                 root=self.root,
+                raw_path=self.path,
+                smiles_idx=self.smiles_idx,
+                y_idx=self.y_idx,
                 hbonds=self.hydrogen_bonds,
                 hbond_cutoff_dist=self.hbond_cutoff_dist,
                 hbond_top_dists=self.hbond_top_dists,
                 name=self.name,
             )
-        if self.name == 'antibiotic':
+        if self.name == 'antibiotic' or (self.path is not None and self.task_type=='classification'):
             sss_tvt = StratifiedShuffleSplit(n_splits=2, test_size=0.20, random_state=0)
             sss_vt = StratifiedShuffleSplit(n_splits=2, test_size=0.50, random_state=0)
             train_index, valtest_index = next(sss_tvt.split(self.dataset.data.y, self.dataset.data.y))
-            val_index, test_index = next(sss_vt.split(self.dataset.data.y[valtest_index], self.dataset.data.y[valtest_index]))
+            val_index, test_index = next(sss_vt.split(self.dataset.data.y[valtest_index],
+                                                      self.dataset.data.y[valtest_index]))
+            val_index = valtest_index[val_index]
+            test_index = valtest_index[test_index]
+            assert not np.intersect1d(train_index, val_index).any()
+            assert not np.intersect1d(train_index, test_index).any()
+            assert not np.intersect1d(val_index, test_index).any()
+            self.split_dict = {'train': train_index, 'valid': val_index, 'test': test_index}
+        elif self.path is not None and self.task_type=='regression':
+            sss_tvt = ShuffleSplit(n_splits=2, test_size=0.20, random_state=0)
+            sss_vt = ShuffleSplit(n_splits=2, test_size=0.50, random_state=0)
+            train_index, valtest_index = next(sss_tvt.split(self.dataset.data.y, self.dataset.data.y))
+            val_index, test_index = next(
+                sss_vt.split(self.dataset.data.y[valtest_index], self.dataset.data.y[valtest_index]))
             val_index = valtest_index[val_index]
             test_index = valtest_index[test_index]
             assert not np.intersect1d(train_index, val_index).any()
