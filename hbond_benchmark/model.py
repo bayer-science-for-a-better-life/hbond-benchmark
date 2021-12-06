@@ -73,7 +73,7 @@ class MolData(LightningDataModule):
                 hbond_top_dists=self.hbond_top_dists,
                 name=self.name,
             )
-        if self.name == 'antibiotic' or (self.path is not None and self.task_type=='classification'):
+        if self.name == 'antibiotic' or (self.path is not None and self.task_type == 'classification'):
             sss_tvt = StratifiedShuffleSplit(n_splits=2, test_size=0.20, random_state=0)
             sss_vt = StratifiedShuffleSplit(n_splits=2, test_size=0.50, random_state=0)
             train_index, valtest_index = next(sss_tvt.split(self.dataset.data.y, self.dataset.data.y))
@@ -85,7 +85,7 @@ class MolData(LightningDataModule):
             assert not np.intersect1d(train_index, test_index).any()
             assert not np.intersect1d(val_index, test_index).any()
             self.split_dict = {'train': train_index, 'valid': val_index, 'test': test_index}
-        elif self.path is not None and self.task_type=='regression':
+        elif self.path is not None and self.task_type == 'regression':
             sss_tvt = ShuffleSplit(n_splits=2, test_size=0.20, random_state=0)
             sss_vt = ShuffleSplit(n_splits=2, test_size=0.50, random_state=0)
             train_index, valtest_index = next(sss_tvt.split(self.dataset.data.y, self.dataset.data.y))
