@@ -41,7 +41,7 @@ class MolData(LightningDataModule):
         self.y_idx = y_idx
         self.hydrogen_bonds = hydrogen_bonds
         self.hbond_cutoff_dist = hbond_cutoff_dist
-        self.hbond_top_dists = hbond_top_dists,
+        self.hbond_top_dists = hbond_top_dists
         self.batch_size = batch_size
         if self.path is None:  # then it's an OGB dataset
             self.dataset_class = MoleculeNetHBonds
@@ -233,6 +233,9 @@ class Net(LightningModule):
         self.num_tasks = num_tasks
         self.evaluator = evaluator
 
+        self.test_preds = None
+        self.test_y = None
+
         self.atom_encoder = AtomEncoder(emb_dim=self.embedding_dim, hydrogen_bonds=self.h_bonds)
 
         if self.virtual_node:
@@ -357,6 +360,8 @@ class Net(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         output = self.forward(batch)
+        if 'classification' in self.task_type:
+            output = F.sigmoid(output)  # not done in the forward pass! only linear!
         y_true = batch.y.view(output.shape).detach().cpu()
         y_pred = output.detach().cpu()
         return {'y_true': y_true, 'y_pred': y_pred}
@@ -374,4 +379,6 @@ class Net(LightningModule):
         y_true = cat([result['y_true'] for result in outputs], dim=0).numpy()
         y_pred = cat([result['y_pred'] for result in outputs], dim=0).numpy()
         res = self.evaluator.eval({'y_true': y_true, 'y_pred': y_pred})
+        self.test_preds = y_pred
+        self.test_y = y_true
         self.log(f'{self.evaluator.eval_metric}/test', res[self.evaluator.eval_metric])

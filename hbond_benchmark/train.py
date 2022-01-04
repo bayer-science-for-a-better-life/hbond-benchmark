@@ -1,5 +1,7 @@
+from pathlib import Path
 from argparse import ArgumentParser
 import sys
+import pickle
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
@@ -52,7 +54,7 @@ def train(args):
     else:
         evaluator = Evaluator(f'ogbg-mol{args.dataset_name}')
 
-    for _ in range(args.n_runs):
+    for run in range(args.n_runs):
         if args.early_stopping is not None:
             early_stopping = EarlyStopping(
                 monitor=f'{evaluator.eval_metric}',
@@ -75,11 +77,17 @@ def train(args):
         )
 
         trainer.fit(model, mol_data)
-        trainer.test()
+        trainer.test(model)
+        save_predictions(trainer, model, run)
         del model
         del trainer
         if args.early_stopping is not None:
             del early_stopping
+
+
+def save_predictions(trainer, model, run):
+    with open(Path(trainer.default_root_dir) / 'preds_test_run_{}.pkl'.format(run), 'wb') as writer:
+        pickle.dump([model.test_y, model.test_preds], writer, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':
