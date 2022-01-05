@@ -80,6 +80,9 @@ class MoleculeNetHBonds(InMemoryDataset):
             :obj:`"FreeSolv"`, :obj:`"Lipo"`, :obj:`"PCBA"`, :obj:`"MUV"`,
             :obj:`"HIV"`, :obj:`"BACE"`, :obj:`"BBPB"`, :obj:`"Tox21"`,
             :obj:`"ToxCast"`, :obj:`"SIDER"`, :obj:`"ClinTox"`).
+        fake (bool): If hbonds is True and fake is True, we will add random edges as fake h bonds with a given
+            probability (probability is at the level of the molecules)
+            proba (float): probability whith wich a molecule will receive one fake h bond if bonds=True and fake=True
         transform (callable, optional): A function/transform that takes in an
             :obj:`torch_geometric.data.Data` object and returns a transformed
             version. The data object will be transformed before every access.
@@ -125,10 +128,14 @@ class MoleculeNetHBonds(InMemoryDataset):
                  hbonds=True,
                  hbond_cutoff_dist=2.35,
                  hbond_top_dists=(4, 5, 6),
+                 fake=False,
+                 proba=0.15,
                  transform=None, pre_transform=None,
                  pre_filter=None):  # useless attributes are needed for harmonized signature across data classes
         self.name = name.lower()
         self.hbonds = hbonds
+        self.fake = fake
+        self.fake_hbond_proba = proba
         self.hbond_cutoff_dist = hbond_cutoff_dist
         self.hbond_top_dists = hbond_top_dists
         assert self.name in self.names.keys()
@@ -196,9 +203,11 @@ class MoleculeNetHBonds(InMemoryDataset):
             edge_indices, edge_attrs = get_edge_features(mol)
 
             # get hydrogen bonds
-            if self.hbonds:
+            if self.hbonds and not self.fake:
                 edge_indices, edge_attrs = handle_hbonds(mol, smiles, edge_indices, edge_attrs, self.hbond_top_dists,
                                                          self.hbond_cutoff_dist)
+            elif self.hbonds and self.fake:
+                edge_indices, edge_attrs = fake_hbonds(mol, edge_indices, edge_attrs, self.fake_hbond_proba)
 
             edge_index = torch.tensor(edge_indices)
             edge_index = edge_index.t().to(torch.long).view(2, -1)
@@ -235,6 +244,10 @@ class CustomDatasetHBonds(InMemoryDataset):
             name (string): The name of the dataset
             smiles_idx (int): The index of the column containing the smiles string
             y_idx (list): The indices of the columns containing the outcome to predict
+            hbonds (bool): Whether we add H-bonds to the graph
+            fake (bool): If hbonds is True and fake is True, we will add random edges as fake h bonds with a given
+            probability (probability is at the level of the molecules)
+            proba (float): probability whith wich a molecule will receive one fake h bond if bonds=True and fake=True
             transform (callable, optional): A function/transform that takes in an
                 :obj:`torch_geometric.data.Data` object and returns a transformed
                 version. The data object will be transformed before every access.
@@ -250,10 +263,13 @@ class CustomDatasetHBonds(InMemoryDataset):
         """
 
     def __init__(self, root, name, raw_path, smiles_idx, y_idx, hbonds=True, hbond_cutoff_dist=2.35,
-                 hbond_top_dists=(4, 5, 6), transform=None, pre_transform=None, pre_filter=None):
+                 hbond_top_dists=(4, 5, 6), fake=False, proba=0.15, transform=None, pre_transform=None,
+                 pre_filter=None):
         self.name = name.lower()
         self.raw_path = raw_path
         self.hbonds = hbonds
+        self.fake = fake
+        self.fake_hbond_proba = proba
         self.smiles_idx = smiles_idx
         self.y_idx = y_idx
         self.hbond_cutoff_dist = hbond_cutoff_dist
@@ -313,9 +329,11 @@ class CustomDatasetHBonds(InMemoryDataset):
             edge_indices, edge_attrs = get_edge_features(mol)
 
             # get hydrogen bonds
-            if self.hbonds:
+            if self.hbonds and not self.fake:
                 edge_indices, edge_attrs = handle_hbonds(mol, smiles, edge_indices, edge_attrs, self.hbond_top_dists,
                                                          self.hbond_cutoff_dist)
+            elif self.hbond and self.fake:
+                edge_indices, edge_attrs = fake_hbonds(mol, edge_indices, edge_attrs, self.fake_hbond_proba)
 
             edge_index = torch.tensor(edge_indices)
             edge_index = edge_index.t().to(torch.long).view(2, -1)
@@ -397,6 +415,24 @@ def handle_hbonds(mol, smiles, edge_indices, edge_attrs, hbond_top_dists, hbond_
     except ValueError:
         warnings.warn(f'Couldn\'t embed {smiles}, skipping H-bonds.')
         return edge_indices, edge_attrs
+
+
+def fake_hbonds(mol, edge_indices, edge_attrs, proba):
+    rn = np.random.random_sample(1)
+    if rn <= proba:
+        # add a fake h bond between two random atoms
+        atoms = [y.GetIdx() for y in mol.GetAtoms()]
+        if len(atoms) >= 2:
+            donor_idx, acceptor_idx = np.random.choice(atoms, size=2, replace=False)
+            #print('Adding fake H bond between atoms {} and {}'.format(donor_idx, acceptor_idx))
+            e = []
+            e.append(e_map['bond_type'].index('HYDROGEN'))
+            e.append(e_map['stereo'].index('STEREONONE'))
+            e.append(e_map['is_conjugated'].index(False))
+
+            edge_indices += [[donor_idx, acceptor_idx], [acceptor_idx, donor_idx]]
+            edge_attrs += [e, e]
+    return edge_indices, edge_attrs
 
 
 def infer_separator(line):

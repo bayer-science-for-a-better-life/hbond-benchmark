@@ -27,11 +27,13 @@ def h_bond_dist(mol, conf, donor_idx, donor_h_idx, acceptor_idx, hbond_top_dists
 def get_donor_acceptor_distances(mol, n_conformers=10, hbond_top_dists=(4, 5, 6)):
     donors = [x[0] for x in Lipinski._HDonors(mol)]
     acceptors = [x[0] for x in Lipinski._HAcceptors(mol)]
+    # If molecule does not have any donor and acceptor then we can skip
+    if len(donors) < 1 or len(acceptors) < 1:
+        return donors, acceptors, np.empty(0)
     # isolate donor hydrogens
     mol_with_h = Chem.AddHs(mol)
     donors_hs = [[y.GetIdx() for y in mol_with_h.GetAtoms()[x].GetNeighbors() if
                   y.GetSymbol() == 'H'] for x in donors]
-
     r = Chem.EmbedMultipleConfs(mol_with_h, numConfs=n_conformers, randomSeed=42, maxAttempts=3)
     if r == -1:
         raise(ValueError("Couldn't embed"))
