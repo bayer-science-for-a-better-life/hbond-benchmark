@@ -29,6 +29,8 @@ class MolData(LightningDataModule):
             y_idx=None,
             task_type='regression',
             hydrogen_bonds=False,
+            fake=False,
+            fake_proba=0.15,
             hbond_cutoff_dist=2.35,
             hbond_top_dists=(4, 5, 6),
             batch_size=32,
@@ -40,6 +42,8 @@ class MolData(LightningDataModule):
         self.smiles_idx = smiles_idx
         self.y_idx = y_idx
         self.hydrogen_bonds = hydrogen_bonds
+        self.fake_hbonds = fake
+        self.fake_hbonds_proba = fake_proba
         self.hbond_cutoff_dist = hbond_cutoff_dist
         self.hbond_top_dists = hbond_top_dists
         self.batch_size = batch_size
@@ -69,6 +73,8 @@ class MolData(LightningDataModule):
                 smiles_idx=self.smiles_idx,
                 y_idx=self.y_idx,
                 hbonds=self.hydrogen_bonds,
+                fake=self.fake_hbonds,
+                proba=self.fake_hbonds_proba,
                 hbond_cutoff_dist=self.hbond_cutoff_dist,
                 hbond_top_dists=self.hbond_top_dists,
                 name=self.name,

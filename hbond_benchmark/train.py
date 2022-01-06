@@ -20,6 +20,8 @@ def parse_args(args):
     parser.add_argument('--y_idx', type=int, nargs='*', default=None)
     parser.add_argument('--task_type', type=str, default='regression')
     parser.add_argument('--hbonds', action='store_true', default=False)
+    parser.add_argument('--fake', action='store_true', default=False)
+    parser.add_argument('--fake_proba', type=float, default=0.15)
     parser.add_argument('--n_runs', type=int, default=1)
     parser.add_argument('--early_stopping', type=int, default=None)
     parser.add_argument('--hbond_cutoff_dist', type=float, default=2.35)
