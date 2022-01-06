@@ -424,7 +424,6 @@ def fake_hbonds(mol, edge_indices, edge_attrs, proba):
         atoms = [y.GetIdx() for y in mol.GetAtoms()]
         if len(atoms) >= 2:
             donor_idx, acceptor_idx = np.random.choice(atoms, size=2, replace=False)
-            #print('Adding fake H bond between atoms {} and {}'.format(donor_idx, acceptor_idx))
             e = []
             e.append(e_map['bond_type'].index('HYDROGEN'))
             e.append(e_map['stereo'].index('STEREONONE'))
